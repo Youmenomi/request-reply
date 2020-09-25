@@ -1,0 +1,77 @@
+{
+  "name": "request-reply",
+  "version": "0.0.0",
+  "description": "",
+  "keywords": [
+    "typescript",
+    "request",
+    "reply",
+    "response",
+    "async",
+    "in-app"
+  ],
+  "main": "dist/cjs/request-reply.cjs.js",
+  "module": "dist/esm/request-reply.esm.js",
+  "types": "dist/types/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "test": "jest",
+    "ts:check": "tsc --noEmit -p tsconfig.build.json",
+    "build:js": "rollup -c",
+    "build:types": "tsc --emitDeclarationOnly -p tsconfig.build.json",
+    "build": "npm run ts:check && eslint --ext .ts,.js ./src && npm run build:js && npm run build:types",
+    "release": "np",
+    "version": "npm run build"
+  },
+  "lint-staged": {
+    "*.{ts,js}": [
+      "prettier --write",
+      "eslint --fix",
+      "jest --bail --findRelatedTests"
+    ]
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Youmenomi/request-reply.git"
+  },
+  "author": "Dean Yao <youmenomi@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Youmenomi/request-reply/issues"
+  },
+  "homepage": "https://github.com/Youmenomi/request-reply#readme",
+  "devDependencies": {
+    "@babel/plugin-proposal-class-properties": "^7.10.4",
+    "@babel/plugin-proposal-decorators": "^7.10.5",
+    "@babel/preset-env": "^7.11.5",
+    "@babel/preset-typescript": "^7.10.4",
+    "@types/jest": "^26.0.14",
+    "@typescript-eslint/eslint-plugin": "^4.2.0",
+    "@typescript-eslint/parser": "^4.2.0",
+    "babel-eslint": "^10.1.0",
+    "babel-jest": "^26.3.0",
+    "eslint": "^7.9.0",
+    "eslint-config-prettier": "^6.11.0",
+    "eslint-plugin-prettier": "^3.1.4",
+    "husky": "^4.3.0",
+    "jest": "^26.4.2",
+    "lint-staged": "^10.4.0",
+    "np": "^6.5.0",
+    "prettier": "^2.1.2",
+    "rollup": "^2.28.1",
+    "rollup-simple-configer": "^0.1.1",
+    "ts-jest": "^26.4.0",
+    "typescript": "^4.0.3"
+  },
+  "dependencies": {
+    "p-map": "^4.0.0",
+    "pichu": "^0.1.1"
+  }
+}
