@@ -152,6 +152,15 @@ describe('request-reply', () => {
     expect(after).not.toBeCalled();
   });
 
+  it('bind this', () => {
+    request.reply(RequestName.Count, (value: number) => {
+      return value;
+    });
+    expect(() => {
+      request.one.call(undefined, RequestName.Count, 123);
+    }).not.toThrowError();
+  });
+
   describe('request.by', () => {
     it('{ concurrency: 3 }', async () => {
       const r1 = jest.fn(getResolve(10, 300));

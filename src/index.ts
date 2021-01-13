@@ -1,6 +1,7 @@
 import { Pichu } from 'pichu';
 import pMap, { Options } from 'p-map';
 import { DPNames, Subtract } from './helper';
+import autoBind from 'auto-bind';
 
 type Resolve = (...args: any[]) => any;
 type Resolves = Resolve[];
@@ -68,6 +69,10 @@ export class Request<
   protected _directory = new Map<string, Resolves>();
   protected _before = new Pichu();
   protected _after = new Pichu();
+
+  constructor() {
+    autoBind(this);
+  }
 
   protected target(event: string, create?: false): Resolves | undefined;
   protected target(event: string, create: true): Resolves;
