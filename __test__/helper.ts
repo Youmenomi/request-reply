@@ -26,15 +26,23 @@ export function getResolve(multiple: number, time?: number, error = false) {
 export function getCustomRequest(
   request: Request,
   concurrency = Infinity,
-  stopOnError = true
+  catchError = false
 ) {
   return async (name: string, ...args: any[]) => {
     return await request.by(
       (accumulator: any, answer: any, index: number) => {
-        accumulator.push(index);
+        accumulator.push({ answer, index });
         return accumulator;
       },
-      { concurrency, stopOnError }
+      { concurrency, catchError }
     )(name, ...args);
   };
+}
+
+export function getResolves(request: Request, name: string) {
+  const target = (request as any).target(name) as Array<any>;
+  if (!target) return null;
+  return target.map((item) => {
+    return item === undefined ? 0 : 1;
+  });
 }

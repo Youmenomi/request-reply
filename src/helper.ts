@@ -9,3 +9,8 @@ export type Subtract<TSubtract, TSubtracted> = Omit<
   TSubtracted,
   keyof TSubtract
 >;
+
+/* istanbul ignore next */
+export function report() {
+  return new Error('[request-reply] Please report this bug to the author.');
+}

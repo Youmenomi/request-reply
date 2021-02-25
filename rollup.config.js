@@ -12,7 +12,7 @@ export default [].concat(
       file: pkg.main,
       format: 'cjs',
     },
-    { external: ['pichu', 'p-map', 'auto-bind'] }
+    { external: ['pichu', 'p-queue', 'auto-bind', 'catch-first'] }
   ),
   build(
     input,
@@ -20,7 +20,7 @@ export default [].concat(
       file: pkg.module,
       format: 'esm',
     },
-    { external: ['pichu', 'p-map', 'auto-bind'] }
+    { external: ['pichu', 'p-queue', 'auto-bind', 'catch-first'] }
   ),
   build(
     input,
@@ -28,10 +28,7 @@ export default [].concat(
       file: `dist/umd/${pkg.name}.umd.js`,
       format: 'umd',
       name: 'requestReply',
-      globals: {
-        ['aggregate-error']: 'AggregateError',
-      },
     },
-    { withMin: true, resolveOnly: ['pichu', 'p-map', 'auto-bind'] }
+    { withMin: true }
   )
 )

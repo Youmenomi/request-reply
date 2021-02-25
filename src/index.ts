@@ -1,10 +1,11 @@
 import { Pichu } from 'pichu';
-import pMap, { Options } from 'p-map';
-import { DPNames, Subtract } from './helper';
+import PQueue, { Options } from 'p-queue';
+import { DPNames, report, Subtract } from './helper';
 import autoBind from 'auto-bind';
+import { CatchFirst, safeAwait } from 'catch-first';
 
 type Resolve = (...args: any[]) => any;
-type Resolves = Resolve[];
+type Resolves = (Resolve | undefined)[];
 export type Reducer = (accumulator: any, answer: any, index: number) => any;
 type Form<TForm> = { [key in keyof TForm]: Resolve };
 type Fusion<TForm extends Form<TForm>, TForm2 extends Form<TForm2>> = {
@@ -70,6 +71,13 @@ export class Request<
   protected _before = new Pichu();
   protected _after = new Pichu();
 
+  protected _count = 0;
+  get isReplying() {
+    return this._count !== 0;
+  }
+
+  protected eventGaps = new Map<string, number>();
+
   constructor() {
     autoBind(this);
   }
@@ -103,10 +111,44 @@ export class Request<
       | TFusion[T]
       | ((...args: Parameters<TFusion[T]>) => Promise<ReturnType<TFusion[T]>>)
   ) {
-    this.target(name, true).push(resolve);
+    const target = this.target(name, true);
+    if (!target.includes(resolve)) {
+      target.push(resolve);
+    } else {
+      if (process.env.NODE_ENV === 'development')
+        console.warn(
+          `[request-reply] Invalid operation, there is a duplicate resolve in reply.`
+        );
+    }
   }
 
-  by(reducer: Reducer, options?: Options) {
+  unreply<T extends keyof TFusion & string>(
+    name: T,
+    resolve:
+      | TFusion[T]
+      | ((...args: Parameters<TFusion[T]>) => Promise<ReturnType<TFusion[T]>>)
+  ) {
+    const target = this.target(name);
+    if (!target) return;
+    target.forEach((func, i) => {
+      if (resolve === func) {
+        target[i] = undefined;
+        let gaps = this.eventGaps.get(name);
+        if (gaps) gaps++;
+        else gaps = 1;
+        this.eventGaps.set(name, gaps);
+      }
+    });
+    if (!this.isReplying) this.sortout();
+  }
+
+  by(
+    reducer: Reducer,
+    options: Options<any, any> & { catchError: boolean } = {
+      catchError: false,
+    }
+  ) {
+    const { catchError } = options;
     return async <T extends keyof TFusion & string>(
       name: T,
       ...args: Parameters<TFusion[T]>
@@ -120,21 +162,62 @@ export class Request<
 
       this._before.emit(name, ...args);
 
+      let empty = true;
       let response: any = [];
-      await pMap(
-        target,
-        (resolve, index) => {
-          return (async () => {
-            response = await reducer(response, await resolve(...args), index);
-          })();
-        },
-        options
-      );
+      const queue = new PQueue(options);
+      const promises: Promise<any>[] = [];
+      target.forEach((resolve, index) => {
+        if (resolve) {
+          empty = false;
+          promises.push(
+            queue.add(async () => {
+              this._count++;
+              const result = await safeAwait(Promise.resolve(resolve(...args)));
+              if (result.length === CatchFirst.caught) {
+                if (catchError === true) {
+                  response = await reducer(response, result[0], index);
+                } else {
+                  queue.pause();
+                  queue.clear();
+                  throw result[0];
+                }
+              } else {
+                response = await reducer(response, result[1], index);
+              }
+              this._count--;
+            })
+          );
+        }
+      });
+      if (empty) {
+        throw new Error(
+          `[request-reply] No reply to the request named ${name}.`
+        );
+      }
+      await Promise.all(promises);
+      if (!this.isReplying) this.sortout();
 
       this._after.emit(name, response);
 
       return response;
     };
+  }
+
+  protected sortout() {
+    this.eventGaps.forEach((_gaps, event) => {
+      const target = this.target(event);
+      /* istanbul ignore next */
+      if (!target) throw report();
+      let i = target.indexOf(undefined);
+      while (i >= 0) {
+        target.splice(i, 1);
+        i = target.indexOf(undefined);
+      }
+      this.eventGaps.delete(event);
+      if (target.length === 0) {
+        this._directory.delete(event);
+      }
+    });
   }
 
   async one<T extends keyof TFusion & string>(
@@ -195,6 +278,10 @@ export class Request<
     this._directory.clear();
     //@ts-expect-error
     this._directory = undefined;
+
+    this.eventGaps.clear();
+    //@ts-expect-error
+    this.eventGaps = undefined;
 
     this._before.dispose();
     //@ts-expect-error
