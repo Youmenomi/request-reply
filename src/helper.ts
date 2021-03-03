@@ -10,6 +10,8 @@ export type Subtract<TSubtract, TSubtracted> = Omit<
   keyof TSubtract
 >;
 
+export type IndexType = string | number | symbol;
+
 /* istanbul ignore next */
 export function report() {
   return new Error('[request-reply] Please report this bug to the author.');

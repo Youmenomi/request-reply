@@ -1,6 +1,6 @@
 import { Pichu } from 'pichu';
 import PQueue, { Options } from 'p-queue';
-import { DPNames, report, Subtract } from './helper';
+import { DPNames, IndexType, report, Subtract } from './helper';
 import autoBind from 'auto-bind';
 import { CatchFirst, safeAwait } from 'catch-first';
 
@@ -67,7 +67,7 @@ export class Request<
   TForm2 extends Form<TForm2> = Form<unknown>,
   TFusion extends Form<TFusion> = Fusion<TForm, TForm2>
 > {
-  protected _directory = new Map<string, Resolves>();
+  protected _directory = new Map<IndexType, Resolves>();
   protected _before = new Pichu();
   protected _after = new Pichu();
 
@@ -76,15 +76,15 @@ export class Request<
     return this._count !== 0;
   }
 
-  protected eventGaps = new Map<string, number>();
+  protected eventGaps = new Map<IndexType, number>();
 
   constructor() {
     autoBind(this);
   }
 
-  protected target(event: string, create?: false): Resolves | undefined;
-  protected target(event: string, create: true): Resolves;
-  protected target(event: string, create = false) {
+  protected target(event: IndexType, create?: false): Resolves | undefined;
+  protected target(event: IndexType, create: true): Resolves;
+  protected target(event: IndexType, create = false) {
     let target = this._directory.get(event);
     if (target) {
       return target;
@@ -105,7 +105,7 @@ export class Request<
     return this._after;
   }
 
-  reply<T extends keyof TFusion & string>(
+  reply<T extends keyof TFusion>(
     name: T,
     resolve:
       | TFusion[T]
@@ -122,7 +122,7 @@ export class Request<
     }
   }
 
-  unreply<T extends keyof TFusion & string>(
+  unreply<T extends keyof TFusion>(
     name: T,
     resolve:
       | TFusion[T]
@@ -149,7 +149,7 @@ export class Request<
     }
   ) {
     const { catchError } = options;
-    return async <T extends keyof TFusion & string>(
+    return async <T extends keyof TFusion>(
       name: T,
       ...args: Parameters<TFusion[T]>
     ) => {
@@ -197,7 +197,7 @@ export class Request<
       await Promise.all(promises);
       if (!this.isReplying) this.sortout();
 
-      this._after.emit(name, response);
+      this._after.emit<any>(name, response);
 
       return response;
     };
@@ -220,7 +220,7 @@ export class Request<
     });
   }
 
-  async one<T extends keyof TFusion & string>(
+  async one<T extends keyof TFusion>(
     name: T,
     ...args: Parameters<TFusion[T]>
   ): Promise<ReturnType<TFusion[T]>> {
@@ -233,21 +233,21 @@ export class Request<
     return await this.by(oneReducer)(name, ...args);
   }
 
-  async all<T extends keyof TFusion & string>(
+  async all<T extends keyof TFusion>(
     name: T,
     ...args: Parameters<TFusion[T]>
   ): Promise<ReturnType<TFusion[T]>[]> {
     return await this.by(allReducer)(name, ...args);
   }
 
-  async raceAll<T extends keyof TFusion & string>(
+  async raceAll<T extends keyof TFusion>(
     name: T,
     ...args: Parameters<TFusion[T]>
   ): Promise<ReturnType<TFusion[T]>[]> {
     return await this.by(raceReducer)(name, ...args);
   }
 
-  async many<T extends keyof TFusion & string>(
+  async many<T extends keyof TFusion>(
     num: number,
     name: T,
     ...args: Parameters<TFusion[T]>
@@ -256,7 +256,7 @@ export class Request<
     return await this.by(allReducer)(name, ...args);
   }
 
-  async raceMany<T extends keyof TFusion & string>(
+  async raceMany<T extends keyof TFusion>(
     num: number,
     name: T,
     ...args: Parameters<TFusion[T]>
@@ -265,7 +265,7 @@ export class Request<
     return await this.by(raceReducer)(name, ...args);
   }
 
-  protected checkMany(num: number, name: string) {
+  protected checkMany(num: number, name: IndexType) {
     const target = this.target(name);
     if (target && target.length !== num) {
       throw new Error(
