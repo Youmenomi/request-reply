@@ -1,13 +1,13 @@
-import { Pichu } from 'pichu';
+import { Form, Listener, Pichu } from 'pichu';
 import PQueue, { Options } from 'p-queue';
 import { DPNames, IndexType, report, Subtract } from './helper';
 import autoBind from 'auto-bind';
 import { CatchFirst, safeAwait } from 'catch-first';
 
-type Resolve = (...args: any[]) => any;
-type Resolves = (Resolve | undefined)[];
+export type { Form, Listener } from 'pichu';
+
+type Listeners = (Listener | undefined)[];
 export type Reducer = (accumulator: any, answer: any, index: number) => any;
-type Form<TForm> = { [key in keyof TForm]: Resolve };
 type Fusion<TForm extends Form<TForm>, TForm2 extends Form<TForm2>> = {
   [key in keyof Subtract<TForm2, TForm>]: TForm[key];
 } &
@@ -17,7 +17,7 @@ type Fusion<TForm extends Form<TForm>, TForm2 extends Form<TForm2>> = {
   {
     [key in DPNames<TForm2, TForm>]: TForm[key] extends TForm2[key]
       ? TForm[key]
-      : Resolve;
+      : Listener;
   };
 
 type Before<TForm extends Form<TForm>> = Omit<
@@ -40,7 +40,7 @@ type After<TForm extends Form<TForm>, TForm2 extends Form<TForm2>> = Omit<
       {
         [key in DPNames<TForm2, TForm>]: TForm[key] extends TForm2[key]
           ? (response: ReturnType<TForm[key]> | ReturnType<TForm[key]>[]) => any
-          : Resolve;
+          : Listener;
       }
   >,
   'emit' | 'thunderShock' | 'thunderPunch' | 'thunderbolt' | 'dispose'
@@ -67,7 +67,7 @@ export class Request<
   TForm2 extends Form<TForm2> = Form<unknown>,
   TFusion extends Form<TFusion> = Fusion<TForm, TForm2>
 > {
-  protected _directory = new Map<IndexType, Resolves>();
+  protected _directory = new Map<IndexType, Listeners>();
   protected _before = new Pichu();
   protected _after = new Pichu();
 
@@ -82,8 +82,8 @@ export class Request<
     autoBind(this);
   }
 
-  protected target(event: IndexType, create?: false): Resolves | undefined;
-  protected target(event: IndexType, create: true): Resolves;
+  protected target(event: IndexType, create?: false): Listeners | undefined;
+  protected target(event: IndexType, create: true): Listeners;
   protected target(event: IndexType, create = false) {
     let target = this._directory.get(event);
     if (target) {
