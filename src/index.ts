@@ -1,12 +1,11 @@
 import { Form, Listener, Pichu } from 'pichu';
 import PQueue, { Options } from 'p-queue';
-import { DPNames, IndexType, report, Subtract } from './helper';
+import { DPNames, IndexType, Subtract } from './helper';
 import autoBind from 'auto-bind';
 import { CatchFirst, safeAwait } from 'catch-first';
 
 export type { Form, Listener } from 'pichu';
 
-type Listeners = (Listener | undefined)[];
 export type Reducer = (accumulator: any, answer: any, index: number) => any;
 type Fusion<TForm extends Form<TForm>, TForm2 extends Form<TForm2>> = {
   [key in keyof Subtract<TForm2, TForm>]: TForm[key];
@@ -19,6 +18,11 @@ type Fusion<TForm extends Form<TForm>, TForm2 extends Form<TForm2>> = {
       ? TForm[key]
       : Listener;
   };
+
+type Emitter = Omit<
+  Pichu,
+  'emit' | 'thunderShock' | 'thunderPunch' | 'thunderbolt' | 'dispose'
+>;
 
 type Before<TForm extends Form<TForm>> = Omit<
   Pichu<TForm>,
@@ -67,42 +71,30 @@ export class Request<
   TForm2 extends Form<TForm2> = Form<unknown>,
   TFusion extends Form<TFusion> = Fusion<TForm, TForm2>
 > {
-  protected _directory = new Map<IndexType, Listeners>();
+  protected _eventMap = new Map<IndexType, Set<Listener>>();
   protected _before = new Pichu();
   protected _after = new Pichu();
-
-  protected _count = 0;
-  get isReplying() {
-    return this._count !== 0;
-  }
-
-  protected eventGaps = new Map<IndexType, number>();
 
   constructor() {
     autoBind(this);
   }
 
-  protected target(event: IndexType, create?: false): Listeners | undefined;
-  protected target(event: IndexType, create: true): Listeners;
-  protected target(event: IndexType, create = false) {
-    let target = this._directory.get(event);
-    if (target) {
-      return target;
-    } else if (create) {
-      target = [];
-      this._directory.set(event, target);
-      return target;
-    } else {
-      return undefined;
+  protected add(event: IndexType) {
+    let listeners = this._eventMap.get(event);
+    if (listeners) {
+      return listeners;
     }
+    listeners = new Set();
+    this._eventMap.set(event, listeners);
+    return listeners;
   }
 
-  get before(): Before<TFusion> {
-    return this._before;
+  get before() {
+    return (this._before as Emitter) as Before<TFusion>;
   }
 
-  get after(): After<TForm, TForm2> {
-    return this._after;
+  get after() {
+    return (this._after as Emitter) as After<TForm, TForm2>;
   }
 
   reply<T extends keyof TFusion>(
@@ -111,9 +103,9 @@ export class Request<
       | TFusion[T]
       | ((...args: Parameters<TFusion[T]>) => Promise<ReturnType<TFusion[T]>>)
   ) {
-    const target = this.target(name, true);
-    if (!target.includes(resolve)) {
-      target.push(resolve);
+    const listeners = this.add(name);
+    if (!listeners.has(resolve)) {
+      listeners.add(resolve);
     } else {
       if (process.env.NODE_ENV === 'development')
         console.warn(
@@ -128,18 +120,13 @@ export class Request<
       | TFusion[T]
       | ((...args: Parameters<TFusion[T]>) => Promise<ReturnType<TFusion[T]>>)
   ) {
-    const target = this.target(name);
-    if (!target) return;
-    target.forEach((func, i) => {
-      if (resolve === func) {
-        target[i] = undefined;
-        let gaps = this.eventGaps.get(name);
-        if (gaps) gaps++;
-        else gaps = 1;
-        this.eventGaps.set(name, gaps);
+    const listeners = this._eventMap.get(name);
+    if (!listeners) return;
+    listeners.forEach((listener) => {
+      if (resolve === listener) {
+        listeners.delete(resolve);
       }
     });
-    if (!this.isReplying) this.sortout();
   }
 
   by(
@@ -153,8 +140,8 @@ export class Request<
       name: T,
       ...args: Parameters<TFusion[T]>
     ) => {
-      const target = this.target(name);
-      if (!target) {
+      const listeners = this._eventMap.get(name);
+      if (!listeners) {
         throw new Error(
           `[request-reply] No reply to the request named ${name}.`
         );
@@ -166,12 +153,13 @@ export class Request<
       let response: any = [];
       const queue = new PQueue(options);
       const promises: Promise<any>[] = [];
-      target.forEach((resolve, index) => {
-        if (resolve) {
-          empty = false;
-          promises.push(
-            queue.add(async () => {
-              this._count++;
+      let index = -1;
+      listeners.forEach((resolve) => {
+        index++;
+        empty = false;
+        promises.push(
+          queue.add(
+            ((index) => async () => {
               const result = await safeAwait(Promise.resolve(resolve(...args)));
               if (result.length === CatchFirst.caught) {
                 if (catchError === true) {
@@ -184,10 +172,9 @@ export class Request<
               } else {
                 response = await reducer(response, result[1], index);
               }
-              this._count--;
-            })
-          );
-        }
+            })(index)
+          )
+        );
       });
       if (empty) {
         throw new Error(
@@ -195,7 +182,6 @@ export class Request<
         );
       }
       await Promise.all(promises);
-      if (!this.isReplying) this.sortout();
 
       this._after.emit<any>(name, response);
 
@@ -203,29 +189,12 @@ export class Request<
     };
   }
 
-  protected sortout() {
-    this.eventGaps.forEach((_gaps, event) => {
-      const target = this.target(event);
-      /* istanbul ignore next */
-      if (!target) throw report();
-      let i = target.indexOf(undefined);
-      while (i >= 0) {
-        target.splice(i, 1);
-        i = target.indexOf(undefined);
-      }
-      this.eventGaps.delete(event);
-      if (target.length === 0) {
-        this._directory.delete(event);
-      }
-    });
-  }
-
   async one<T extends keyof TFusion>(
     name: T,
     ...args: Parameters<TFusion[T]>
   ): Promise<ReturnType<TFusion[T]>> {
-    const target = this.target(name);
-    if (target && target.length !== 1) {
+    const listeners = this._eventMap.get(name);
+    if (listeners && listeners.size > 1) {
       throw new Error(
         `[request-reply] The handler of request.one() only allows one reply.`
       );
@@ -266,8 +235,8 @@ export class Request<
   }
 
   protected checkMany(num: number, name: IndexType) {
-    const target = this.target(name);
-    if (target && target.length !== num) {
+    const listeners = this._eventMap.get(name);
+    if (listeners && listeners.size !== num) {
       throw new Error(
         `[request-reply] Different from the specified number of replies.`
       );
@@ -275,13 +244,9 @@ export class Request<
   }
 
   dispose() {
-    this._directory.clear();
+    this._eventMap.clear();
     //@ts-expect-error
-    this._directory = undefined;
-
-    this.eventGaps.clear();
-    //@ts-expect-error
-    this.eventGaps = undefined;
+    this._eventMap = undefined;
 
     this._before.dispose();
     //@ts-expect-error

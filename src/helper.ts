@@ -11,8 +11,3 @@ export type Subtract<TSubtract, TSubtracted> = Omit<
 >;
 
 export type IndexType = string | number | symbol;
-
-/* istanbul ignore next */
-export function report() {
-  return new Error('[request-reply] Please report this bug to the author.');
-}

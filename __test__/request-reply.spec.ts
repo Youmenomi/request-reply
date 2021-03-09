@@ -15,7 +15,6 @@ describe('request-reply', () => {
     .spyOn(global.console, 'warn')
     .mockImplementation(() => true);
   let request: Request<RequestForm>;
-  let sortout: jest.SpyInstance;
   let before: jest.Mock<number, [number]>;
   let after: jest.Mock<number, [number]>;
 
@@ -24,7 +23,6 @@ describe('request-reply', () => {
     warn.mockClear();
 
     request = new Request();
-    sortout = jest.spyOn(request as any, 'sortout');
     before = jest.fn((data) => {
       return data;
     });
@@ -36,6 +34,12 @@ describe('request-reply', () => {
   });
 
   it('request.unreply', async () => {
+    request.unreply(RequestName.Login, (user: string, password: string) => {
+      user;
+      password;
+      return true;
+    });
+
     request.reply(
       RequestName.Login,
       async function f1(user: string, password: string) {
@@ -46,22 +50,18 @@ describe('request-reply', () => {
         return true;
       }
     );
-    expect(getResolves(request, RequestName.Login)).toEqual([1]);
+    expect(getResolves(request, RequestName.Login)).toBe(1);
     request.one(RequestName.Login, '', '');
-    expect(getResolves(request, RequestName.Login)).toEqual([0]);
+    expect(getResolves(request, RequestName.Login)).toBe(0);
     await expect(
       async () => await request.one(RequestName.Login, '', '')
     ).rejects.toThrowError(
       '[request-reply] No reply to the request named login.'
     );
-    expect(getResolves(request, RequestName.Login)).toEqual([0]);
-    expect(request.isReplying).toBeTruthy();
+    expect(getResolves(request, RequestName.Login)).toBe(0);
     await delay(200);
-    expect(getResolves(request, RequestName.Login)).toEqual(null);
-    expect(request.isReplying).toBeFalsy();
-    expect(sortout).toBeCalledTimes(1);
+    expect(getResolves(request, RequestName.Login)).toBe(0);
 
-    sortout.mockClear();
     async function f2(user: string, password: string) {
       user;
       password;
@@ -76,42 +76,39 @@ describe('request-reply', () => {
       return true;
     }
     request.reply(RequestName.Login, f3);
-    expect(getResolves(request, RequestName.Login)).toEqual([1, 1]);
+    expect(getResolves(request, RequestName.Login)).toBe(2);
     request.all(RequestName.Login, '', '');
     request.all(RequestName.Login, '', '');
-    expect(getResolves(request, RequestName.Login)).toEqual([1, 1]);
+    expect(getResolves(request, RequestName.Login)).toBe(2);
     request.unreply(RequestName.Login, f2);
-    expect(getResolves(request, RequestName.Login)).toEqual([0, 1]);
+    expect(getResolves(request, RequestName.Login)).toBe(1);
     request.unreply(RequestName.Login, f3);
-    expect(getResolves(request, RequestName.Login)).toEqual([0, 0]);
-    expect(request.isReplying).toBeTruthy();
+    expect(getResolves(request, RequestName.Login)).toBe(0);
     await delay(200);
-    expect(getResolves(request, RequestName.Login)).toEqual(null);
-    expect(request.isReplying).toBeFalsy();
-    expect(sortout).toBeCalledTimes(1);
+    expect(getResolves(request, RequestName.Login)).toBe(0);
 
-    sortout.mockClear();
     request.reply(RequestName.Login, f2);
-    expect(getResolves(request, RequestName.Login)).toEqual([1]);
+    expect(getResolves(request, RequestName.Login)).toBe(1);
     request.reply(RequestName.Login, f2);
-    expect(getResolves(request, RequestName.Login)).toEqual([1]);
+    expect(getResolves(request, RequestName.Login)).toBe(1);
     expect(console.warn).toBeCalledTimes(0);
     process.env.NODE_ENV = 'development';
     request.reply(RequestName.Login, f2);
-    expect(getResolves(request, RequestName.Login)).toEqual([1]);
+    expect(getResolves(request, RequestName.Login)).toBe(1);
     expect(console.warn).toBeCalledTimes(1);
+    expect(console.warn).nthCalledWith(
+      1,
+      '[request-reply] Invalid operation, there is a duplicate resolve in reply.'
+    );
     request.unreply(RequestName.Login, f2);
-    expect(getResolves(request, RequestName.Login)).toEqual(null);
-    expect(sortout).toBeCalledTimes(1);
+    expect(getResolves(request, RequestName.Login)).toBe(0);
     expect(() => request.unreply(RequestName.Login, f3)).not.toThrowError();
 
-    sortout.mockClear();
     request.reply(RequestName.Login, f2);
     request.reply(RequestName.Login, f3);
-    expect(getResolves(request, RequestName.Login)).toEqual([1, 1]);
+    expect(getResolves(request, RequestName.Login)).toBe(2);
     request.unreply(RequestName.Login, f2);
-    expect(getResolves(request, RequestName.Login)).toEqual([1]);
-    expect(sortout).toBeCalledTimes(1);
+    expect(getResolves(request, RequestName.Login)).toBe(1);
   });
 
   it('should throw a error, when no response to the request', async () => {
@@ -138,7 +135,6 @@ describe('request-reply', () => {
     );
     expect(before).not.toBeCalled();
     expect(after).not.toBeCalled();
-    expect(request.isReplying).toBeFalsy();
   });
 
   it('request.many', async () => {
@@ -164,7 +160,6 @@ describe('request-reply', () => {
     );
     expect(before).not.toBeCalled();
     expect(after).not.toBeCalled();
-    expect(request.isReplying).toBeFalsy();
   });
 
   it('request.all', async () => {
@@ -176,7 +171,6 @@ describe('request-reply', () => {
     expect(before).toBeCalledWith(10);
     expect(after).toBeCalledTimes(1);
     expect(after).toBeCalledWith([100, 200, 300]);
-    expect(request.isReplying).toBeFalsy();
   });
 
   it('request.raceMany', async () => {
@@ -202,7 +196,6 @@ describe('request-reply', () => {
     );
     expect(before).not.toBeCalled();
     expect(after).not.toBeCalled();
-    expect(request.isReplying).toBeFalsy();
   });
 
   it('request.raceAll', async () => {
@@ -218,7 +211,6 @@ describe('request-reply', () => {
     expect(before).toBeCalledWith(10);
     expect(after).toBeCalledTimes(1);
     expect(after).toBeCalledWith([300, 200, 100]);
-    expect(request.isReplying).toBeFalsy();
   });
 
   it('request.dispose', async () => {
@@ -246,7 +238,6 @@ describe('request-reply', () => {
     ).rejects.toThrowError();
     expect(before).not.toBeCalled();
     expect(after).not.toBeCalled();
-    expect(request.isReplying).toBeFalsy();
   });
 
   it('bind this', () => {
@@ -283,7 +274,6 @@ describe('request-reply', () => {
         { index: 1, answer: 200 },
         { index: 0, answer: 100 },
       ]);
-      expect(request.isReplying).toBeFalsy();
     });
     it('{ concurrency: 1 }', async () => {
       const r1 = jest.fn(getResolve(10, 300));
@@ -309,7 +299,6 @@ describe('request-reply', () => {
         { index: 1, answer: 200 },
         { index: 2, answer: 300 },
       ]);
-      expect(request.isReplying).toBeFalsy();
     });
     it('{ concurrency: 1, catchError: true }', async () => {
       const r1 = jest.fn(getResolve(10, 300));
@@ -335,7 +324,6 @@ describe('request-reply', () => {
         { index: 1, answer: new Error('Opps!') },
         { index: 2, answer: 300 },
       ]);
-      expect(request.isReplying).toBeFalsy();
     });
     it('{ concurrency: 1, catchError: false }', async () => {
       const r1 = jest.fn(getResolve(10, 300));
@@ -357,7 +345,6 @@ describe('request-reply', () => {
       expect(before).toBeCalledTimes(1);
       expect(before).toBeCalledWith(10);
       expect(after).not.toBeCalled();
-      expect(request.isReplying).toBeTruthy();
     });
   });
 

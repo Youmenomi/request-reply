@@ -1,4 +1,4 @@
-import { Request } from '../src';
+import { Form, Listener, Request } from '../src';
 
 export enum RequestName {
   Count = 'count',
@@ -23,12 +23,12 @@ export function getResolve(multiple: number, time?: number, error = false) {
   };
 }
 
-export function getCustomRequest(
-  request: Request,
+export function getCustomRequest<TForm extends Form<TForm> = Form<any>>(
+  request: Request<TForm>,
   concurrency = Infinity,
   catchError = false
 ) {
-  return async (name: string, ...args: any[]) => {
+  return async (name: keyof TForm, ...args: Parameters<TForm[keyof TForm]>) => {
     return await request.by(
       (accumulator: any, answer: any, index: number) => {
         accumulator.push({ answer, index });
@@ -39,10 +39,11 @@ export function getCustomRequest(
   };
 }
 
-export function getResolves(request: Request, name: string) {
-  const target = (request as any).target(name) as Array<any>;
-  if (!target) return null;
-  return target.map((item) => {
-    return item === undefined ? 0 : 1;
-  });
+export function getResolves<TForm extends Form<TForm> = Form<any>>(
+  request: Request<TForm>,
+  name: string
+) {
+  const listeners = (request as any)._eventMap.get(name) as Set<Listener>;
+  if (!listeners) return 0;
+  return listeners.size;
 }
