@@ -5825,10 +5825,10 @@ performance-now@^2.1.0:
   resolved "https://registry.yarnpkg.com/performance-now/-/performance-now-2.1.0.tgz#6309f4e0e5fa913ec1c69307ae364b4b377c9e7b"
   integrity sha1-Ywn04OX6kT7BxpMHrjZLSzd8nns=
 
-pichu@0.2.2:
-  version "0.2.2"
-  resolved "https://registry.yarnpkg.com/pichu/-/pichu-0.2.2.tgz#f22035ed940824eb46e7575fd189d01edf3ad3e7"
-  integrity sha512-Ne0hnCDEk/c5QJS6tPbw2sNSHcccJg4gyoJ5KpVDyPZmV76rlul1aYdb9zfrkUfdc18ffZDVyDaTwITjo+R0wQ==
+pichu@0.2.3:
+  version "0.2.3"
+  resolved "https://registry.yarnpkg.com/pichu/-/pichu-0.2.3.tgz#5f153ced2e3b4cac8e0701b5d01860aefeaa7da5"
+  integrity sha512-bnUGhuGU3rsiuUzVGHbeUNNhx24d12SCt7ntYt/VSZAzKSlAs8mWn6y8Ue/6/JzrSrHCfBgTa6eHDw51syF6wg==
   dependencies:
     auto-bind "^4.0.0"
 
