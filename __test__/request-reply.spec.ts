@@ -1,11 +1,15 @@
-import { Request } from '../src';
+import {
+  Request,
+  __debug_clear_listening_count,
+  __debug_get_listening_count,
+} from '../src';
 import {
   RequestForm,
   RequestName,
   getResolve,
   getCustomRequest,
   delay,
-  getResolves,
+  getResolveNum,
 } from './helper';
 
 const env = process.env;
@@ -33,6 +37,78 @@ describe('request-reply', () => {
     request.after.on(RequestName.Count, after);
   });
 
+  it('debug', async () => {
+    const request = new Request();
+    request.replyOnce('test1', () => '');
+    request.replyOnce('test2', () => '', 'g1');
+    request.reply('test1', () => '');
+    request.reply('test2', () => '', 'g2');
+    expect(getResolveNum(request, 'test1')).toBe(2);
+    expect(getResolveNum(request, 'test2')).toBe(2);
+    expect(__debug_get_listening_count()).toBe(4);
+    __debug_clear_listening_count();
+    expect(__debug_get_listening_count()).toBe(0);
+  });
+
+  it('request.replyOnce', async () => {
+    {
+      const func = jest.fn((e) => e);
+      const request = new Request();
+      request.replyOnce('test', () => func('replyOnce1'));
+      expect(getResolveNum(request, 'test')).toBe(1);
+
+      expect(await request.one('test', {})).toEqual('replyOnce1');
+      expect(getResolveNum(request, 'test')).toBe(0);
+    }
+    {
+      const func = jest.fn((e) => e);
+      const request = new Request();
+      request.replyOnce('test', func);
+      expect(getResolveNum(request, 'test')).toBe(1);
+      request.unreply('test', func);
+    }
+  });
+
+  it('group', async () => {
+    {
+      const func = jest.fn((e) => e);
+      const request = new Request();
+      request.reply('test', () => func('reply1'), 'g1');
+      request.reply('test', () => func('reply2'), 'g2');
+      request.replyOnce('test', () => func('replyOnce1'), 'g2');
+      request.replyOnce('test', () => func('replyOnce2'), 'g3');
+
+      request.unreplyGroup('g1', 'non-exist');
+
+      request.unreplyGroup('g2', 'test');
+      expect(getResolveNum(request, 'test')).toBe(2);
+      expect(await request.all('test', {})).toEqual(['reply1', 'replyOnce2']);
+      expect(getResolveNum(request, 'test')).toBe(1);
+      request.unreplyGroup('g1');
+      expect(getResolveNum(request, 'test')).toBe(0);
+    }
+    {
+      const func = jest.fn((e) => e);
+      const request = new Request();
+      const f1 = () => func('f1');
+      const f2 = () => func('f2');
+      request.reply('test1', f1, 'g');
+      request.reply('test1', f2, 'g');
+      request.replyOnce('test2', f1, 'g');
+      request.replyOnce('test2', f2, 'g');
+
+      request.unreplyGroup('g', f1);
+      expect(getResolveNum(request, 'test1')).toBe(1);
+      expect(getResolveNum(request, 'test2')).toBe(1);
+      expect(await request.all('test1', {})).toEqual(['f2']);
+      expect(await request.all('test2', {})).toEqual(['f2']);
+      expect(getResolveNum(request, 'test1')).toBe(1);
+      expect(getResolveNum(request, 'test2')).toBe(0);
+      request.unreplyGroup('g');
+      expect(getResolveNum(request, 'test1')).toBe(0);
+    }
+  });
+
   it('request.unreply', async () => {
     request.unreply(RequestName.Login, (user: string, password: string) => {
       user;
@@ -50,17 +126,17 @@ describe('request-reply', () => {
         return true;
       }
     );
-    expect(getResolves(request, RequestName.Login)).toBe(1);
+    expect(getResolveNum(request, RequestName.Login)).toBe(1);
     request.one(RequestName.Login, '', '');
-    expect(getResolves(request, RequestName.Login)).toBe(0);
+    expect(getResolveNum(request, RequestName.Login)).toBe(0);
     await expect(
       async () => await request.one(RequestName.Login, '', '')
     ).rejects.toThrowError(
-      '[request-reply] No reply to the request named login.'
+      '[request-reply] No reply to the request named "login".'
     );
-    expect(getResolves(request, RequestName.Login)).toBe(0);
+    expect(getResolveNum(request, RequestName.Login)).toBe(0);
     await delay(200);
-    expect(getResolves(request, RequestName.Login)).toBe(0);
+    expect(getResolveNum(request, RequestName.Login)).toBe(0);
 
     async function f2(user: string, password: string) {
       user;
@@ -76,45 +152,56 @@ describe('request-reply', () => {
       return true;
     }
     request.reply(RequestName.Login, f3);
-    expect(getResolves(request, RequestName.Login)).toBe(2);
+    expect(getResolveNum(request, RequestName.Login)).toBe(2);
     request.all(RequestName.Login, '', '');
     request.all(RequestName.Login, '', '');
-    expect(getResolves(request, RequestName.Login)).toBe(2);
+    expect(getResolveNum(request, RequestName.Login)).toBe(2);
     request.unreply(RequestName.Login, f2);
-    expect(getResolves(request, RequestName.Login)).toBe(1);
+    expect(getResolveNum(request, RequestName.Login)).toBe(1);
     request.unreply(RequestName.Login, f3);
-    expect(getResolves(request, RequestName.Login)).toBe(0);
+    expect(getResolveNum(request, RequestName.Login)).toBe(0);
     await delay(200);
-    expect(getResolves(request, RequestName.Login)).toBe(0);
+    expect(getResolveNum(request, RequestName.Login)).toBe(0);
 
     request.reply(RequestName.Login, f2);
-    expect(getResolves(request, RequestName.Login)).toBe(1);
+    expect(getResolveNum(request, RequestName.Login)).toBe(1);
     request.reply(RequestName.Login, f2);
-    expect(getResolves(request, RequestName.Login)).toBe(1);
+    expect(getResolveNum(request, RequestName.Login)).toBe(1);
     expect(console.warn).toBeCalledTimes(0);
     process.env.NODE_ENV = 'development';
     request.reply(RequestName.Login, f2);
-    expect(getResolves(request, RequestName.Login)).toBe(1);
+    expect(getResolveNum(request, RequestName.Login)).toBe(1);
     expect(console.warn).toBeCalledTimes(1);
     expect(console.warn).nthCalledWith(
       1,
       '[request-reply] Invalid operation, there is a duplicate resolve in reply.'
     );
     request.unreply(RequestName.Login, f2);
-    expect(getResolves(request, RequestName.Login)).toBe(0);
+    expect(getResolveNum(request, RequestName.Login)).toBe(0);
     expect(() => request.unreply(RequestName.Login, f3)).not.toThrowError();
 
     request.reply(RequestName.Login, f2);
     request.reply(RequestName.Login, f3);
-    expect(getResolves(request, RequestName.Login)).toBe(2);
+    expect(getResolveNum(request, RequestName.Login)).toBe(2);
     request.unreply(RequestName.Login, f2);
-    expect(getResolves(request, RequestName.Login)).toBe(1);
+    expect(getResolveNum(request, RequestName.Login)).toBe(1);
+
+    request.unreply(RequestName.Login, (user: string, password: string) => {
+      user;
+      password;
+      return true;
+    });
+
+    //@ts-expect-error
+    expect(() => request.unreplyGroup()).toThrowError(
+      '[request-reply] "undefined" is not a valid parameter.'
+    );
   });
 
   it('should throw a error, when no response to the request', async () => {
     await expect(
       async () => await request.by(() => null)(RequestName.Count, 10)
-    ).rejects.toThrow('[request-reply] No reply to the request named count.');
+    ).rejects.toThrow('[request-reply] No reply to the request named "count".');
   });
 
   it('request.one', async () => {

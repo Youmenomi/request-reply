@@ -1,4 +1,5 @@
-import { Form, Listener, Request } from '../src';
+import { Hydreigon } from 'hydreigon';
+import { Form, Request } from '../src';
 
 export enum RequestName {
   Count = 'count',
@@ -39,11 +40,9 @@ export function getCustomRequest<TForm extends Form<TForm> = Form<any>>(
   };
 }
 
-export function getResolves<TForm extends Form<TForm> = Form<any>>(
+export function getResolveNum<TForm extends Form<TForm> = Form<any>>(
   request: Request<TForm>,
   name: string
 ) {
-  const listeners = (request as any)._eventMap.get(name) as Set<Listener>;
-  if (!listeners) return 0;
-  return listeners.size;
+  return ((request as any)._indexer as Hydreigon).searchSize('event', name);
 }

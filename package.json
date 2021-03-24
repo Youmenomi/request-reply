@@ -8,7 +8,8 @@
     "reply",
     "response",
     "async",
-    "in-app"
+    "in-app",
+    "group"
   ],
   "main": "dist/cjs/request-reply.cjs.js",
   "module": "dist/esm/request-reply.esm.js",
@@ -49,15 +50,15 @@
   "devDependencies": {
     "@babel/plugin-proposal-class-properties": "^7.13.0",
     "@babel/plugin-proposal-decorators": "^7.13.5",
-    "@babel/preset-env": "^7.13.10",
+    "@babel/preset-env": "^7.13.12",
     "@babel/preset-typescript": "^7.13.0",
-    "@types/jest": "^26.0.20",
-    "@typescript-eslint/eslint-plugin": "^4.17.0",
-    "@typescript-eslint/parser": "^4.17.0",
+    "@types/jest": "^26.0.21",
+    "@typescript-eslint/eslint-plugin": "^4.19.0",
+    "@typescript-eslint/parser": "^4.19.0",
     "babel-eslint": "^10.1.0",
     "babel-jest": "^26.6.3",
     "del-cli": "^3.0.1",
-    "eslint": "^7.21.0",
+    "eslint": "^7.22.0",
     "eslint-config-prettier": "^8.1.0",
     "eslint-plugin-prettier": "^3.3.1",
     "husky": "5",
@@ -66,15 +67,16 @@
     "np": "^7.4.0",
     "pinst": "^2.1.6",
     "prettier": "^2.2.1",
-    "rollup": "^2.41.0",
+    "rollup": "^2.42.3",
     "rollup-simple-configer": "^0.1.1",
-    "ts-jest": "^26.5.3",
+    "ts-jest": "^26.5.4",
     "typescript": "^4.2.3"
   },
   "dependencies": {
     "auto-bind": "^4.0.0",
     "catch-first": "^0.3.2",
+    "hydreigon": "^0.1.5",
     "p-queue": "^6.6.2",
-    "pichu": "0.2.4"
+    "pichu": "0.3.1"
   }
 }

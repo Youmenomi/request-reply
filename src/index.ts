@@ -3,6 +3,7 @@ import PQueue, { Options } from 'p-queue';
 import { DPNames, IndexType, Subtract } from './helper';
 import autoBind from 'auto-bind';
 import { CatchFirst, safeAwait } from 'catch-first';
+import { Hydreigon } from 'hydreigon';
 
 export type { Form, Listener } from 'pichu';
 
@@ -66,12 +67,66 @@ const raceReducer: Reducer = async (accumulator: any, answer: any) => {
   return accumulator;
 };
 
+enum Mode {
+  on,
+  once,
+  asyncOnce,
+}
+
+enum Search {
+  event = 'event',
+  listener = 'listener',
+  group = 'group',
+}
+
+let __debug_listening_count = 0;
+export function __debug_get_listening_count() {
+  return __debug_listening_count;
+}
+export function __debug_clear_listening_count() {
+  return (__debug_listening_count = 0);
+}
+
+class Listen {
+  _isOnce = false;
+  get isOnce() {
+    return this._isOnce;
+  }
+
+  constructor(
+    public event: IndexType,
+    public listener: Listener,
+    public mode: Mode,
+    public group: any
+  ) {
+    this._isOnce = this.mode !== Mode.on;
+    __debug_listening_count++;
+  }
+  same(event: IndexType, listener: Listener) {
+    return event === this.event && listener === this.listener;
+  }
+  async exec(...arg: any[]) {
+    return this.listener(...arg);
+  }
+  dispose() {
+    //@ts-expect-error
+    this.listener = undefined;
+    this.group = undefined;
+
+    __debug_listening_count--;
+  }
+}
+
 export class Request<
   TForm extends Form<TForm> = Form<any>,
   TForm2 extends Form<TForm2> = Form<unknown>,
   TFusion extends Form<TFusion> = Fusion<TForm, TForm2>
 > {
-  protected _eventMap = new Map<IndexType, Set<Listener>>();
+  protected _indexer = new Hydreigon(
+    Search.event,
+    Search.listener,
+    Search.group
+  ).knock<Listen>();
   protected _before = new Pichu();
   protected _after = new Pichu();
 
@@ -79,14 +134,21 @@ export class Request<
     autoBind(this);
   }
 
-  protected add(event: IndexType) {
-    let listeners = this._eventMap.get(event);
-    if (listeners) {
-      return listeners;
+  protected add(event: IndexType, listener: Listener, mode: Mode, group: any) {
+    if (
+      this._indexer.search(Search.event, event, true).some((listen) => {
+        return listen.listener === listener;
+      })
+    ) {
+      if (process.env.NODE_ENV === 'development')
+        console.warn(
+          '[request-reply] Invalid operation, there is a duplicate resolve in reply.'
+        );
+      return null;
     }
-    listeners = new Set();
-    this._eventMap.set(event, listeners);
-    return listeners;
+    const listen = new Listen(event, listener, mode, group);
+    this._indexer.add(listen);
+    return listen;
   }
 
   get before() {
@@ -101,17 +163,20 @@ export class Request<
     name: T,
     resolve:
       | TFusion[T]
-      | ((...args: Parameters<TFusion[T]>) => Promise<ReturnType<TFusion[T]>>)
+      | ((...args: Parameters<TFusion[T]>) => Promise<ReturnType<TFusion[T]>>),
+    group?: any
   ) {
-    const listeners = this.add(name);
-    if (!listeners.has(resolve)) {
-      listeners.add(resolve);
-    } else {
-      if (process.env.NODE_ENV === 'development')
-        console.warn(
-          `[request-reply] Invalid operation, there is a duplicate resolve in reply.`
-        );
-    }
+    return !!this.add(name, resolve, Mode.on, group);
+  }
+
+  replyOnce<T extends keyof TFusion>(
+    name: T,
+    resolve:
+      | TFusion[T]
+      | ((...args: Parameters<TFusion[T]>) => Promise<ReturnType<TFusion[T]>>),
+    group?: any
+  ) {
+    return !!this.add(name, resolve, Mode.once, group);
   }
 
   unreply<T extends keyof TFusion>(
@@ -120,13 +185,47 @@ export class Request<
       | TFusion[T]
       | ((...args: Parameters<TFusion[T]>) => Promise<ReturnType<TFusion[T]>>)
   ) {
-    const listeners = this._eventMap.get(name);
-    if (!listeners) return;
-    listeners.forEach((listener) => {
-      if (resolve === listener) {
-        listeners.delete(resolve);
-      }
+    this._indexer.search(Search.event, name, true).some((listen) => {
+      if (listen.same(name, resolve)) {
+        this._indexer.remove(listen);
+        listen.dispose();
+        return true;
+      } else return false;
     });
+  }
+
+  unreplyGroup(group: any): void;
+  unreplyGroup<T extends keyof TFusion>(
+    group: any,
+    resolve: (
+      ...args: Parameters<TFusion[T]>
+    ) => Promise<ReturnType<TFusion[T]>>
+  ): void;
+  unreplyGroup(group: any, name: keyof TForm): void;
+  unreplyGroup(group: any, nameOrResolve?: keyof TForm | Listener) {
+    if (group === undefined) {
+      throw new Error('[request-reply] "undefined" is not a valid parameter.');
+    }
+    if (nameOrResolve === undefined) {
+      this._indexer.search(Search.group, group).forEach((listen) => {
+        this._indexer.remove(listen);
+        listen.dispose();
+      });
+    } else if (typeof nameOrResolve === 'function') {
+      this._indexer.search(Search.group, group).forEach((listen) => {
+        if (nameOrResolve === listen.listener) {
+          this._indexer.remove(listen);
+          listen.dispose();
+        }
+      });
+    } else {
+      this._indexer.search(Search.group, group).forEach((listen) => {
+        if (nameOrResolve === listen.event) {
+          this._indexer.remove(listen);
+          listen.dispose();
+        }
+      });
+    }
   }
 
   by(
@@ -140,27 +239,33 @@ export class Request<
       name: T,
       ...args: Parameters<TFusion[T]>
     ) => {
-      const listeners = this._eventMap.get(name);
-      if (!listeners) {
+      const listens = this._indexer.search(Search.event, name);
+      if (listens.size === 0) {
         throw new Error(
-          `[request-reply] No reply to the request named ${name}.`
+          `[request-reply] No reply to the request named "${name}".`
         );
       }
 
       this._before.emit(name, ...args);
 
-      let empty = true;
       let response: any = [];
       const queue = new PQueue(options);
       const promises: Promise<any>[] = [];
       let index = -1;
-      listeners.forEach((resolve) => {
+      this._indexer.tie(listens);
+      listens.forEach((listen) => {
         index++;
-        empty = false;
         promises.push(
           queue.add(
             ((index) => async () => {
-              const result = await safeAwait(Promise.resolve(resolve(...args)));
+              let result: [unknown] | [null, any];
+              if (listen.isOnce) {
+                this._indexer.remove(listen);
+                result = await safeAwait(listen.exec(...args));
+                listen.dispose();
+              } else {
+                result = await safeAwait(listen.exec(...args));
+              }
               if (result.length === CatchFirst.caught) {
                 if (catchError === true) {
                   response = await reducer(response, result[0], index);
@@ -176,11 +281,7 @@ export class Request<
           )
         );
       });
-      if (empty) {
-        throw new Error(
-          `[request-reply] No reply to the request named ${name}.`
-        );
-      }
+      this._indexer.untie(listens);
       await Promise.all(promises);
 
       this._after.emit<any>(name, response);
@@ -193,8 +294,7 @@ export class Request<
     name: T,
     ...args: Parameters<TFusion[T]>
   ): Promise<ReturnType<TFusion[T]>> {
-    const listeners = this._eventMap.get(name);
-    if (listeners && listeners.size > 1) {
+    if (this._indexer.searchSize(Search.event, name) > 1) {
       throw new Error(
         `[request-reply] The handler of request.one() only allows one reply.`
       );
@@ -235,8 +335,7 @@ export class Request<
   }
 
   protected checkMany(num: number, name: IndexType) {
-    const listeners = this._eventMap.get(name);
-    if (listeners && listeners.size !== num) {
+    if (this._indexer.searchSize(Search.event, name) !== num) {
       throw new Error(
         `[request-reply] Different from the specified number of replies.`
       );
@@ -244,9 +343,9 @@ export class Request<
   }
 
   dispose() {
-    this._eventMap.clear();
+    this._indexer.dispose();
     //@ts-expect-error
-    this._eventMap = undefined;
+    this._indexer = undefined;
 
     this._before.dispose();
     //@ts-expect-error
